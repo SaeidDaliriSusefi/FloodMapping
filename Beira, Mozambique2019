@@ -1,1 +1,119 @@
 
+var coords = [
+  [33.80501711178719, -20.45171888784694],
+  [35.10689699459969, -20.45171888784694],
+  [35.10689699459969, -18.879259812307044],
+  [33.80501711178719, -18.879259812307044],
+  [33.80501711178719, -20.45171888784694]  // Closing the polygon by repeating the first coordinate
+];
+
+// Create an Earth Engine polygon geometry using the coordinates.
+var roi = ee.Geometry.Polygon(coords);
+
+var Polarization = 'VV';  // Change to 'VV' for VV polarization
+var InstrumentMode='IW'
+var OrbitProperties_Pass='DESCENDING'
+var Before_Start='2019-02-15'
+var Before_End='2019-02-24'
+
+var After_Start='2019-03-15'
+var After_End='2019-03-21'
+var SMOOTHING_RADIUS = 50;
+
+
+
+// Load Sentinel-1 C-band SAR Ground Range collection (log scale, VV, descending)
+var Collection = ee.ImageCollection('COPERNICUS/S1_GRD')
+.filter(ee.Filter.eq('instrumentMode', InstrumentMode))
+.filter(ee.Filter.listContains('transmitterReceiverPolarisation', Polarization))
+.filter(ee.Filter.eq('orbitProperties_pass', OrbitProperties_Pass))
+.filterMetadata('resolution_meters', 'equals' , 10)
+.filterBounds(roi)
+.select(Polarization);
+
+
+
+//Filter by date
+var Before_Collection = Collection.filterDate(Before_Start, Before_End);
+var After_Collection = Collection.filterDate(After_Start, After_End);
+
+
+
+var Before_Image = Before_Collection.mosaic().clip(roi);
+var After_Image = After_Collection.mosaic().clip(roi);
+
+
+// Display map
+Map.centerObject(roi, 7);
+Map.addLayer(Before_Image, {min:-25,max:0}, 'Before flood'+Polarization, 0);
+Map.addLayer(After_Image, {min:-25,max:0}, 'After flood'+Polarization, 0);
+
+
+
+
+
+Map.addLayer(Before_Image.addBands(After_Image).addBands(Before_Image), {min: -25, max: -8}, 
+'B/A/A composite'+Polarization, 0);
+
+//Apply filter to reduce speckle
+var Before_Image_Filtered = Before_Image.focal_mean(SMOOTHING_RADIUS, 'circle', 'meters');
+var After_Image_Filtered = After_Image.focal_mean(SMOOTHING_RADIUS, 'circle', 'meters');
+
+//Display filtered images
+Map.addLayer(Before_Image_Filtered, {min:-25,max:0}, 'Before Flood Filtered'+Polarization ,0);
+Map.addLayer(After_Image_Filtered, {min:-25,max:0}, 'After Flood Filtered'+Polarization ,0);
+
+// Calculate difference between before and after
+var difference= After_Image_Filtered.divide(Before_Image_Filtered);
+Map.addLayer(difference, {min: 0,max:2}, 
+'difference filtered'+Polarization, 0);
+
+
+
+
+
+// Combine the mean and standard deviation reducers.
+var reducers = ee.Reducer.mean().combine({
+  reducer2: ee.Reducer.stdDev(),
+  sharedInputs: true
+});
+
+
+
+// Calculate the mean and standard deviation for ratio1624VH
+var stats_difference = difference.reduceRegion({
+    reducer: ee.Reducer.mean().combine({
+        reducer2: ee.Reducer.stdDev(),
+        sharedInputs: true
+    }),
+    geometry: roi,
+    scale: 300,
+    bestEffort: true
+});
+
+// Extract the mean and standard deviation for ratio2024VH and ensure they are ee.Number
+var mean_difference = ee.Number(stats_difference.get('mean'));
+var stdDev_difference = ee.Number(stats_difference.get('stdDev'));
+print('Stats for difference:', stats_difference);
+
+
+
+// Calculate threshold as mean + 2 * standard deviation
+
+var mean_difference = ee.Number(stats_difference.get('VV_mean'));
+var stdDev_difference = ee.Number(stats_difference.get('VV_stdDev'));
+var thresholdValue = (mean_difference.multiply(0.5)).add(stdDev_difference.multiply(2));
+
+print('Computed Threshold (mean + 2*stdDev):', thresholdValue);
+
+
+
+// Create a mask of significant changes using the computed threshold
+var significantChangeMask = difference.gt(thresholdValue);
+
+// Optionally, add the mask to the map for visualization
+Map.addLayer(
+  significantChangeMask.updateMask(significantChangeMask), 
+  {palette: 'red'}, 
+  'Significant Change Areas'
+);
