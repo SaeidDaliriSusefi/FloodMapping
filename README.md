@@ -4,4 +4,4 @@
 ## 📸 Example Outputs
 
 #### Annual Average Air Temperature:
-![image alt](https://github.com/SaeidDaliriSusefi/AirTemperature-Trend-Monitoring/blob/188a5da75f1135381b59a86a70e7ed40fb97b0a8/Images/Yearly%20Average%20Air%20Temperature%20Italy.gif)
+![image alt](https://github.com/SaeidDaliriSusefi/FloodMapping-JRC/blob/7a39f2a32d0d0768ea9a0112094a2166f1592f34/Images/download%20(7).png)
