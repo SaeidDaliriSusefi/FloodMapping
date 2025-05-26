@@ -1,4 +1,4 @@
-# FloodMapping-JRC
+# FloodMapping
 
 
 ## 📸 Example Outputs
